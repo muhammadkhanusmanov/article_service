@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.utils.translation import gettext_lazy as _
+from django.core.exceptions import ValidationError
 
 class User(AbstractUser):
     """Custom user model for authors"""
@@ -16,6 +17,14 @@ class Editor(models.Model):
     specialization = models.CharField(max_length=100)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    
+    def clean(self):
+        if not self.user.is_staff and not self.user.is_superuser:
+            raise ValidationError('Editor must be a staff member or superuser')
+    
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
     
     def __str__(self):
         return f"{self.user.get_full_name()} - {self.specialization}"
@@ -48,6 +57,16 @@ class Article(models.Model):
     is_approved = models.BooleanField(default=False)
     approved_at = models.DateTimeField(null=True, blank=True)
     approved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='approved_articles')
+    
+    def clean(self):
+        if self.status == self.Status.COMPLETED and not self.edited_file:
+            raise ValidationError('Edited file is required for completed articles')
+        if self.is_approved and not self.approved_by:
+            raise ValidationError('Approved by field is required when article is approved')
+    
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
     
     def __str__(self):
         return self.title
