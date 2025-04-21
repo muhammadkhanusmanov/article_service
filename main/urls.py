@@ -1,6 +1,5 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from rest_framework.authtoken.views import obtain_auth_token
 from . import views
 
 router = DefaultRouter()
@@ -12,7 +11,7 @@ router.register(r'statistics', views.StatisticsViewSet, basename='statistics')
 urlpatterns = [
     # Authentication endpoints
     path('auth/register/', views.UserRegistrationView.as_view(), name='user-register'),
-    path('auth/login/', obtain_auth_token, name='api-token-auth'),
+    path('auth/login/', views.UserLoginView.as_view(), name='user-login'),
     path('auth/logout/', views.UserLogoutView.as_view(), name='user-logout'),
     
     # User profile

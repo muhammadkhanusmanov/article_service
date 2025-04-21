@@ -1,22 +1,56 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
+from django.contrib.auth.hashers import make_password
 from .models import Editor, Article, ArticleAssignment, Feedback, Statistics
 
 User = get_user_model()
 
 class UserSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True)
+    
     class Meta:
         model = User
-        fields = ('id', 'username', 'email', 'first_name', 'last_name', 'phone')
+        fields = ('id', 'username', 'email', 'first_name', 'last_name', 'phone', 'password')
         read_only_fields = ('id',)
+    
+    def create(self, validated_data):
+        validated_data['password'] = make_password(validated_data['password'])
+        return super().create(validated_data)
+    
+    def update(self, instance, validated_data):
+        if 'password' in validated_data:
+            validated_data['password'] = make_password(validated_data['password'])
+        return super().update(instance, validated_data)
 
 class EditorSerializer(serializers.ModelSerializer):
-    user = UserSerializer(read_only=True)
+    user = UserSerializer()
     
     class Meta:
         model = Editor
         fields = ('id', 'user', 'specialization', 'is_active', 'created_at')
         read_only_fields = ('id', 'created_at')
+    
+    def create(self, validated_data):
+        user_data = validated_data.pop('user')
+        user = User.objects.create_user(**user_data)
+        editor = Editor.objects.create(user=user, **validated_data)
+        return editor
+    
+    def update(self, instance, validated_data):
+        user_data = validated_data.pop('user', {})
+        user = instance.user
+        
+        # Update user fields
+        for attr, value in user_data.items():
+            setattr(user, attr, value)
+        user.save()
+        
+        # Update editor fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        
+        return instance
 
 class ArticleSerializer(serializers.ModelSerializer):
     author = UserSerializer(read_only=True)
@@ -42,13 +76,17 @@ class ArticleAssignmentSerializer(serializers.ModelSerializer):
         read_only_fields = ('id', 'assigned_at')
 
 class FeedbackSerializer(serializers.ModelSerializer):
-    article = ArticleSerializer(read_only=True)
+    article = serializers.PrimaryKeyRelatedField(queryset=Article.objects.all())
     author = UserSerializer(read_only=True)
     
     class Meta:
         model = Feedback
         fields = ('id', 'article', 'author', 'rating', 'comment', 'created_at')
-        read_only_fields = ('id', 'created_at')
+        read_only_fields = ('id', 'created_at', 'author')
+    
+    def create(self, validated_data):
+        validated_data['author'] = self.context['request'].user
+        return super().create(validated_data)
 
 class StatisticsSerializer(serializers.ModelSerializer):
     class Meta:
